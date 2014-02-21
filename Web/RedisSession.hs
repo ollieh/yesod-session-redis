@@ -1,48 +1,45 @@
 module Web.RedisSession (
-		makeRedisConnectionPool,
-		makeRedisLocalConnectionPool,
 		setSession, setSessionExpiring,
 		getSession,
 		newKey,
 		Redis
 	) where
 
-import Database.Redis.Redis
+import Database.Redis
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
-import Data.ByteString.Lazy (toChunks)
-import Data.Binary (decode, encode, Binary)
-import Data.Conduit.Pool
-import System.Entropy (getEntropy)
-import Data.Digest.Pure.MD5 (md5)
-import Data.Time (getCurrentTime)
+import qualified Data.ByteString.Char8 as BC
+import Network.Socket.Internal (PortNumber)
+import System.Random 
+import Control.Monad
+import Control.Monad.Trans (liftIO)
 
-makeRedisConnectionPool :: String -> String -> IO (Pool Redis)
-makeRedisConnectionPool server port = createPool (connect server port) disconnect 1 0.5 1
+setSessionExpiring :: Connection -> ByteString -> [(ByteString, ByteString)] -> Integer ->  IO ()
+setSessionExpiring conn key values timeout = runRedis conn $ do
+    forM_ values (\x -> hset key (fst x) (snd x))
+    expire key timeout
+    return ()
 
-makeRedisLocalConnectionPool :: IO (Pool Redis)
-makeRedisLocalConnectionPool = makeRedisConnectionPool localhost defaultPort
+setSession :: Connection -> ByteString -> [(ByteString, ByteString)] ->  IO ()
+setSession conn key values = runRedis conn $ do
+    oldsess <- liftIO $ getSession conn key
+    let todelete = case oldsess of
+                       Just o -> o
+                       Nothing -> []
+    hdel key $ map fst todelete
+    forM_ values (\x -> hset key (fst x) (snd x))
+    return ()
 
-setSession :: (Binary a) => Pool Redis -> ByteString -> a -> IO ()
-setSession pool key value = withResource pool $ \redis -> do
-	set redis key $ encode value
-	return ()
+getSession :: Connection -> ByteString -> IO (Maybe [(ByteString, ByteString)])
+getSession conn key = runRedis conn $ do
+    result <- hgetall key
+    let output = case result of
+                     (Right b) -> Just b
+                     _ -> Nothing
+    return output
 
-setSessionExpiring :: (Binary a) => Pool Redis -> ByteString -> a -> Int -> IO ()
-setSessionExpiring pool key value timeout = withResource pool $ \redis -> do
-	setEx redis key timeout $ encode value
-	return ()
-
-getSession :: (Binary a) => Pool Redis -> ByteString -> IO (Maybe a)
-getSession pool key = withResource pool $ \redis -> do
-	val <- get redis key
-	case val of
-		RBulk Nothing -> return Nothing
-		RBulk (Just v) -> return $ Just $ decode v
-		_ -> return Nothing
-
-newKey :: IO ByteString
 newKey = do
-	ent <- getEntropy 80
-	now <- getCurrentTime
-	return $ B.concat [(B.concat . toChunks . encode . md5 . encode . show) now, ent]
+         let n = 30
+         gen <- newStdGen 
+         let chars = ['0'..'9']++['a'..'z']++['A'..'B']
+         let numbers = randomRs (0, (length chars - 1)) gen
+         return $ BC.pack $ take n $ map (chars!!) numbers

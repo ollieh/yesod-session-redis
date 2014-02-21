@@ -1,68 +1,60 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Yesod.Session.Redis (
-		localRedisSessionBackend,
-		redisSessionBackend
+        redisSessionBackend
 	) where
 
 import qualified Web.RedisSession as R
 import Yesod.Core
+import Yesod.Core.Types
 import qualified Network.Wai as W
 import Web.Cookie
 import Control.Monad.Trans (liftIO)
-import Data.Maybe (fromMaybe)
-import Data.Time (UTCTime, addUTCTime)
-import Data.Conduit.Pool (Pool)
-import Data.Binary
-import Data.Text (Text)
-import Data.Text.Encoding
-import Control.Monad (liftM)
-
-instance Binary Text where 
-	put = put . encodeUtf8 
-	get = liftM decodeUtf8 get
+import Data.Time (UTCTime, addUTCTime, getCurrentTime)
+import qualified Data.Text as T
+import Data.ByteString (ByteString)
+import Database.Redis
+import Network.Socket.Internal (PortNumber)
+import qualified Data.Map as M
+import qualified Data.ByteString.Char8 as BC
+import Data.Maybe
 
 sessionName = "yesodSession"
+timeout = 10
 
-loadRedisSession :: (Yesod master) => Pool R.Redis -> master -> W.Request -> UTCTime -> IO BackendSession
-loadRedisSession pool _ req now = do
-	let val = do
-		raw <- lookup "Cookie" $ W.requestHeaders req
-		lookup sessionName $ parseCookies raw
-	case val of
-		Nothing -> return []
-		Just s -> fmap (fromMaybe []) $ liftIO $ R.getSession pool s
+loadRedisSession :: Connection -> Integer -> W.Request -> IO (SessionMap, SaveSession)
+loadRedisSession conn timeout req = do
+        let val = do
+            raw <- lookup "Cookie" $ W.requestHeaders req
+            lookup sessionName $ parseCookies raw
+        key <- case val of
+            Nothing -> R.newKey
+            Just k -> return k
+        sess <- case val of
+                        Nothing -> return M.empty
+                        Just s -> do 
+                                     result <- R.getSession conn s
+                                     return $ M.fromList $ map (\x -> ((T.pack . BC.unpack . fst) x, snd x)) $ fromJust result
+        let save = saveRedisSession conn timeout key
+        return (sess, save)
 
-saveRedisSession :: (Yesod master) => Pool R.Redis -> Int -> master -> W.Request -> UTCTime -> BackendSession -> BackendSession -> IO [Header]
-saveRedisSession pool timeout master req now _ sess = do
-	let val = do
-		raw <- lookup "Cookie" $ W.requestHeaders req
-		lookup sessionName $ parseCookies raw
-	key <- case val of
-		Nothing -> R.newKey
-		Just k -> return k
-	R.setSessionExpiring pool key sess timeout
-	return [AddCookie def {
-			setCookieName = sessionName,
-			setCookieValue = key,
-			setCookiePath = Just $ cookiePath master,
-			setCookieExpires = Just expires,
-			setCookieDomain = cookieDomain master,
-			setCookieHttpOnly = True
-		}]
-	where
-		expires = fromIntegral (timeout * 60) `addUTCTime` now
+saveRedisSession :: Connection -> Integer -> ByteString -> SessionMap -> IO [Header]
+saveRedisSession conn timeout key sess = do
+    now <- getCurrentTime
+    let expires = fromIntegral (timeout * 60) `addUTCTime` now
+    R.setSessionExpiring conn key (map (\x -> ((BC.pack . T.unpack . fst) x, snd x)) (M.toList sess)) timeout
+    return [AddCookie def {
+            setCookieName = sessionName,
+            setCookieValue = key,
+            setCookiePath = Just "/",
+            setCookieExpires = Just expires,
+            setCookieDomain = Nothing,
+            setCookieHttpOnly = True
+        }]
 
 
-localRedisSessionBackend :: (Yesod master) => Int -> IO (SessionBackend master)
-localRedisSessionBackend = sessionBackend R.makeRedisLocalConnectionPool
-
-redisSessionBackend :: (Yesod master) => String -> String -> Int -> IO (SessionBackend master)
-redisSessionBackend server port = sessionBackend (R.makeRedisConnectionPool server port)
-
-sessionBackend :: (Yesod master) => IO (Pool R.Redis) -> Int -> IO (SessionBackend master)
-sessionBackend mkPool timeout = do
-	pool <- mkPool
-	return $ SessionBackend {
-		sbSaveSession = saveRedisSession pool timeout,
-		sbLoadSession = loadRedisSession pool
+redisSessionBackend :: IO SessionBackend
+redisSessionBackend  = do
+	conn <- connect defaultConnectInfo
+	return SessionBackend {
+		sbLoadSession = loadRedisSession conn 20
 	}
