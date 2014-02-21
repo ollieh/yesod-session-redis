@@ -15,17 +15,18 @@ import Control.Monad.Trans (liftIO)
 
 setSessionExpiring :: Connection -> ByteString -> [(ByteString, ByteString)] -> Integer ->  IO ()
 setSessionExpiring conn key values timeout = runRedis conn $ do
+    del [key]
     forM_ values (\x -> hset key (fst x) (snd x))
     expire key timeout
     return ()
 
 setSession :: Connection -> ByteString -> [(ByteString, ByteString)] ->  IO ()
-setSession conn key values = runRedis conn $ do
+setSession conn key values = runRedis conn $ do 
     oldsess <- liftIO $ getSession conn key
     let todelete = case oldsess of
                        Just o -> o
                        Nothing -> []
-    hdel key $ map fst todelete
+    hdel key $ map fst todelete --- ISNT PROPERLY DELETING KEYS PLS FIX PLS! ;_; trying to remove all the hkeys without refreshing the expiry in redis ---
     forM_ values (\x -> hset key (fst x) (snd x))
     return ()
 
