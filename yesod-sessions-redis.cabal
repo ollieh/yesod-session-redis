@@ -1,4 +1,4 @@
-name: yesod-redis-sessions
+name: yesod-sessions-redis
 version: 0.1.0
 license: BSD3
 license-file: LICENSE
@@ -9,10 +9,10 @@ category: Database
 stability: experimental
 cabal-version: >= 1.6
 build-type: Simple
-homepage: https://github.com/ollieh/yesod-redis-sessions
+homepage: https://github.com/ollieh/yesod-sessions-redis
 source-repository head
   type: git
-  location: https://ollieh@github.com/ollieh/yesod-redis-sessions.git
+  location: https://ollieh@github.com/ollieh/yesod-sessions-redis.git
 
 library
   build-depends: base >= 4 && < 5, mtl, time, bytestring >= 0.9, text, hedis >= 0.6, cookie, binary, pool-conduit, yesod-core >= 1.0, wai, containers, network, random
