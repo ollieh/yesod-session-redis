@@ -1,4 +1,12 @@
-dist/
+dist*
 cabal-dev/
-
 *.swp
+*.hi
+*.o
+.hsenv*
+.stack-work/
+.cabal-sandbox
+cabal.sandbox.config
+.DS_Store
+*~
+\#*

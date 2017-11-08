@@ -1,5 +1,5 @@
 name: yesod-session-redis
-version: 0.1.0
+version: 0.2.0
 license: BSD3
 license-file: LICENSE
 author: Oliver Hunt
@@ -16,5 +16,19 @@ source-repository head
   location: https://ollieh@github.com/ollieh/yesod-session-redis.git
 
 library
-  build-depends: base >= 4 && < 5, mtl, time, bytestring >= 0.9, text, hedis >= 0.6, cookie, binary, pool-conduit, yesod-core >= 1.0, wai, containers, network, random
-  exposed-modules: Web.RedisSession, Yesod.Session.Redis
+  build-depends: base >=4.8.2.0 && <4.9 || >=4.9.1.0 && <5
+               , binary
+               , bytestring
+               , containers
+               , cookie
+               , hedis >= 0.9
+               , mtl
+               , network
+               , random
+               , text
+               , time
+               , wai
+               , yesod-core >= 1
+  exposed-modules: Web.RedisSession
+                 , Yesod.Session.Redis
+  ghc-options: -Wall -fwarn-tabs -O2
