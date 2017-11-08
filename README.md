@@ -12,7 +12,9 @@ instance Yesod App where
       return $ Just backend
 ```
 
-or to have a redis connection available in other places you could put it in your app
+## Using your own Redis Connection
+
+to have a redis connection available in other places you could put it in your App
 
 Application.hs
 
@@ -51,7 +53,7 @@ data App = App
 
 instance Yesod App where
      -- Store session data in redis with a key in a cookie clientside
-     makeSessionBackend  = do
+     makeSessionBackend app = do
       let conn = Just $ appRedisConn app -- ^ use this connection for sessions
           name = "[SESSION_NAME]" -- ^ change the session name here
           domain = Nothing -- ^ just use whatever domain the request comes in on
