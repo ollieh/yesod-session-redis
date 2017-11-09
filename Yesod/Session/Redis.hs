@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Yesod.Session.Redis
-  ( redisSessionBackend
+  ( getSessionKey
+  , redisSessionBackend
   ) where
 
 import           Control.Arrow             ((&&&))
@@ -17,6 +18,21 @@ import qualified Web.RedisSession          as R
 import           Yesod.Core
 import           Yesod.Core.Types
 
+
+getSessionKey :: ByteString -- ^ Name of the session (used for cookies and redis key)
+              -> W.Request  -- ^ incoming Wai Request
+              -> IO (ByteString, Maybe ByteString)
+getSessionKey sessionName req = do
+  let val = do
+        raw <- lookup "Cookie" $ W.requestHeaders req
+        lookup sessionName $ parseCookies raw
+  key <- case val of
+           Nothing ->
+             R.newKey
+           Just k ->
+             return k
+  return (key, val)
+
 loadRedisSession :: Connection
                  -> ByteString -- ^ Name of the session (used for cookies and redis key)
                  -> Maybe ByteString -- ^ domain for the cookie
@@ -24,22 +40,15 @@ loadRedisSession :: Connection
                  -> W.Request -- ^ incoming Wai Request
                  -> IO (SessionMap, SaveSession)
 loadRedisSession conn sessionName mSessionDomain timeout req = do
-        let val = do
-            raw <- lookup "Cookie" $ W.requestHeaders req
-            lookup sessionName $ parseCookies raw
-        key <- case val of
+  (key, val) <- getSessionKey sessionName req
+  sess <- case val of
             Nothing ->
-              R.newKey
-            Just k ->
-              return k
-        sess <- case val of
-                  Nothing ->
-                    return M.empty
-                  Just sessionKey -> do
-                    result <- R.getSession conn sessionKey
-                    return $ M.fromList $ map ((T.pack . BC.unpack . fst) &&& snd) $ fromJust result
-        let saveSession = saveRedisSession conn sessionName mSessionDomain timeout key
-        return (sess, saveSession)
+              return M.empty
+            Just sessionKey -> do
+              result <- R.getSession conn sessionKey
+              return $ M.fromList $ map ((T.pack . BC.unpack . fst) &&& snd) $ fromJust result
+  let saveSession = saveRedisSession conn sessionName mSessionDomain timeout key
+  return (sess, saveSession)
 
 saveRedisSession :: Connection -- ^ Redis connection pool
                  -> ByteString -- ^ Name of the session (used for cookies and redis key)
@@ -49,20 +58,20 @@ saveRedisSession :: Connection -- ^ Redis connection pool
                  -> SessionMap -- ^ session information
                  -> IO [Header]
 saveRedisSession conn sessionName mSessionDomain timeout key sess = do
-    now <- getCurrentTime
-    let expires = timeout `addUTCTime` now
-    R.setSessionExpiring conn key ( map
-                                    ((BC.pack . T.unpack . fst) &&& snd)
-                                    (M.toList sess)
-                                  ) (truncate timeout)
-    return [ AddCookie def { setCookieName     = sessionName
-                           , setCookieValue    = key
-                           , setCookiePath     = Just "/"
-                           , setCookieExpires  = Just expires
-                           , setCookieDomain   = mSessionDomain
-                           , setCookieHttpOnly = True
-                           }
-           ]
+  now <- getCurrentTime
+  let expires = timeout `addUTCTime` now
+  R.setSessionExpiring conn key ( map
+                                  ((BC.pack . T.unpack . fst) &&& snd)
+                                  (M.toList sess)
+                                ) (truncate timeout)
+  return [ AddCookie def { setCookieName     = sessionName
+                         , setCookieValue    = key
+                         , setCookiePath     = Just "/"
+                         , setCookieExpires  = Just expires
+                         , setCookieDomain   = mSessionDomain
+                         , setCookieHttpOnly = True
+                         }
+         ]
 
 redisSessionBackend :: Maybe Connection -- ^ If Nothing then a default connection is created via 'defaultConnectInfo'
                     -> ByteString -- ^ Name of the session (used for cookies and redis key)
