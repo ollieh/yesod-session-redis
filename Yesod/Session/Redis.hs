@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Yesod.Session.Redis
   ( getSessionKey
+  , sessionKeyName
   , redisSessionBackend
   ) where
 
@@ -18,6 +19,8 @@ import qualified Web.RedisSession          as R
 import           Yesod.Core
 import           Yesod.Core.Types
 
+sessionKeyName :: T.Text
+sessionKeyName = "_KEY"
 
 getSessionKey :: ByteString -- ^ Name of the session (used for cookies and redis key)
               -> W.Request  -- ^ incoming Wai Request
@@ -43,10 +46,11 @@ loadRedisSession conn sessionName mSessionDomain timeout req = do
   (key, val) <- getSessionKey sessionName req
   sess <- case val of
             Nothing ->
-              return M.empty
+              return $ M.singleton sessionKeyName key
             Just sessionKey -> do
               result <- R.getSession conn sessionKey
-              return $ M.fromList $ map ((T.pack . BC.unpack . fst) &&& snd) $ fromJust result
+              let session = M.fromList $ map ((T.pack . BC.unpack . fst) &&& snd) $ fromJust result
+              return $ M.insert sessionKeyName key session
   let saveSession = saveRedisSession conn sessionName mSessionDomain timeout key
   return (sess, saveSession)
 
