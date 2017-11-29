@@ -95,7 +95,7 @@ saveRedisSession conn sessionName mSessionDomain timeout key sess = do
 simpleRedisSessionBackend :: ByteString -- ^ Name of the session (used for cookies and redis key)
                           -> NominalDiffTime -- ^ How long until the session expires (converted to seconds when used)
                           -> IO SessionBackend
-simpleRedisSessionBackend sessionName timeout = do
+simpleRedisSessionBackend sessionName timeout =
   redisSessionBackend' Nothing sessionName Nothing timeout (const (pure $ Left ())) (const True) (const Nothing)
 
 
@@ -104,12 +104,23 @@ redisSessionBackend :: Maybe Connection -- ^ If Nothing then a default connectio
                     -> Maybe ByteString -- ^ domain for the cookie (Nothing does current domain)
                     -> NominalDiffTime -- ^ How long until the session expires (converted to seconds when used)
                     -> IO SessionBackend
-redisSessionBackend mConnection sessionName mSessionDomain timeout = do
+redisSessionBackend mConnection sessionName mSessionDomain timeout =
   redisSessionBackend' mConnection sessionName mSessionDomain timeout (const (pure $ Left ())) (const True) (const Nothing)
 
 
 -- | Use this if you'd like to specify whether the session key is put in the session and if the session should be saved
 --   or loaded based off the Wai Request
+-- A Function you can use to get the Yesod Route from the Wai Request:
+-- @
+-- routeFromRequest :: ParseRoute a => W.Request -> Maybe (Route a)
+-- routeFromRequest req =
+--   let
+--     path = W.pathInfo req
+--     convert sofar (t, mT) = sofar ++ [ (t, fromMaybe "" mT) ]
+--     query = foldl' convert [] (queryToQueryText $ W.queryString req) :: [ (Text, Text) ]
+--   in
+--     parseRoute (path, query)
+-- @
 redisSessionBackend' :: Maybe Connection -- ^ If Nothing then a default connection is created via 'defaultConnectInfo'
                      -> ByteString -- ^ Name of the session (used for cookies and redis key)
                      -> Maybe ByteString -- ^ domain for the cookie (Nothing does current domain)
