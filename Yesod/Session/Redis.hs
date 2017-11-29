@@ -109,7 +109,7 @@ redisSessionBackend mConnection sessionName mSessionDomain timeout =
 
 
 -- | Use this if you'd like to specify whether the session key is put in the session and if the session should be saved
---   or loaded based off the Wai Request
+--   or what is loaded based off the Wai Request
 -- A Function you can use to get the Yesod Route from the Wai Request:
 -- @
 -- routeFromRequest :: ParseRoute a => W.Request -> Maybe (Route a)
