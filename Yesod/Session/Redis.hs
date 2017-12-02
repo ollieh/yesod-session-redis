@@ -115,7 +115,7 @@ redisSessionBackend mConnection sessionName mSessionDomain timeout =
 -- routeFromRequest :: ParseRoute a => W.Request -> Maybe (Route a)
 -- routeFromRequest req =
 --   let
---     path = W.pathInfo req
+--     path = Network.HTTP.Types.decodePathSegments $ W.rawPathInfo req
 --     convert sofar (t, mT) = sofar ++ [ (t, fromMaybe "" mT) ]
 --     query = foldl' convert [] (queryToQueryText $ W.queryString req) :: [ (Text, Text) ]
 --   in
